@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.pulmuone.OnlineIFServer.dao.CommonDao">
+	<select id="systems" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select * 
+		from systems 
+	</select>
+
+	<select id="interfaces" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select i.*, u.system_id
+		from interfaces i
+		join ifuse u on u.if_id=i.if_id and u.use_yn='Y'
+		<if test="ifId != null and ifId != ''">
+		where i.if_id = #{ifId}
+		</if>
+	</select>
+
+	<select id="metas" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select * 
+		from ifmeta
+		<if test="ifId != null and ifId != ''">
+		where if_id = #{ifId}
+		</if>
+		order by if_id, if_tbl
+	</select>
+
+	<select id="metaAttrs" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select m.if_id, a.* 
+		from ifmeta m
+		join ifmeta_attr a on a.if_tbl_id=m.if_tbl_id and a.if_tbl=m.if_tbl and a.use_yn='Y'
+		<if test="ifId != null and ifId != ''">
+		where m.if_id = #{ifId}
+		</if>
+		order by m.if_id, a.if_tbl, a.if_col
+	</select>
+
+	<insert id="log" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+		insert into iflog 
+				(if_date, if_id, if_result, is_dummy, system_id, method, server_id, uri, param, client, req_json, res_json, time)
+		values(sysdate, #{ifId}, #{ifResult}, #{isDummy}, #{systemId}, #{method}, #{serverId}, #{uri}, #{param}, #{client}, #{reqJson}, #{resJson}, #{time})
+	</insert>
+
+	<select id="findDummy" parameterType="map" resultType="string">
+		select res_json reqJson
+		from ifdummy 
+		where system_id = #{systemId} and if_id = #{interfaceId} and active='Y'
+	</select>
+
+</mapper>

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.pulmuone.OnlineIFServer.dao.MailDao">
+	<select id="getTableList" resultType="hashmap">
+		select table_name from user_tables
+		WHERE table_name LIKE '%HDR_IFACE_ALL%'
+		UNION ALL
+		select table_name from user_tables
+		WHERE table_name LIKE '%LIN_IFACE_ALL%'
+		UNION ALL
+		select table_name from user_tables
+		WHERE table_name LIKE '%HDR_IFACE_NO%'
+		UNION ALL
+		select table_name from user_tables
+		WHERE table_name LIKE '%LIN_IFACE_NO%'
+	</select>
+
+	<select id="getPosCount" parameterType="string" resultType="int">
+		SELECT count(*) FROM ${table} WHERE INF_DATE = #{time} 
+	</select>
+	
+	<select id="getErpCount" parameterType="string" resultType="int">
+		SELECT count(*) FROM ${table} WHERE INF_DATE = #{time} AND ITF_FLG = 'Y'
+	</select>
+	
+	<select id="getName" parameterType="string" resultType="string">
+		SELECT B.COMMENTS
+		FROM   ALL_TABLES A, ALL_TAB_COMMENTS B
+		WHERE  A.TABLE_NAME = B.TABLE_NAME
+		AND  A.TABLE_NAME = #{tableId}
+		ORDER BY A.TABLE_NAME
+	</select>
+	
+	<select id="getPosTime" parameterType="string" resultType="hashmap">
+		SELECT TO_CHAR(IF_DATE, 'hh24:mi:ss') pos FROM IFLOG 
+		WHERE IF_ID IN (select if_id from ifmeta where IF_TBL = #{table} AND if_id like '%_INP')
+		AND IF_DATE BETWEEN TO_DATE(#{start}, 'yyyymmddhh24miss') AND TO_DATE(#{end}, 'yyyymmddhh24miss')
+		ORDER BY IF_DATE desc
+	</select>
+	
+	<select id="getErpTime" parameterType="string" resultType="hashmap">
+		SELECT DISTINCT TO_CHAR(ITF_DAT, 'hh24:mi:ss') ITF_DAT 
+		FROM ${table}
+		WHERE INF_DATE = #{time}
+		and ITF_DAT BETWEEN TO_DATE(#{start}, 'yyyymmddhh24miss') AND TO_DATE(#{end}, 'yyyymmddhh24miss')
+		ORDER BY ITF_DAT desc
+	</select>
+	
+	<select id="getReceivers" resultType="hashmap">
+		SELECT *
+		FROM ifmail
+		WHERE USE_YN = 'Y'
+	</select>
+	
+	<select id="getOrgaReceivers" resultType="hashmap">
+		SELECT *
+		FROM ifmail
+		WHERE USE_ORGA_YN = 'Y'
+	</select>
+	
+	<select id="getOrgaCount" resultType="hashmap">
+		SELECT a.a 상품정보, b.a 상품팀분류, c.a 상품분류대분류, d.a 상품분류중분류, e.a 상품분류소분류, f.a 매장분류채널, g.a 매장분류파트, h.a 매장정보마스터, i.a 구매단가
+		, j.a 권역단가, k.a 본사표준단가, l.a 로케이터, n.a 일배마스터, m.a 협력사, o.a 협력사상품, p.a 품목매장발주제한 , q.a bom헤더, r.a bom라인
+		, s.a bom그룹헤더, t.a bom그룹라인, u.a 소분조합헤더, v.a 소분조합라인, w.a 소분해체헤더, x.a 소분해체라인, y.a 공통코드, z.a 수불부
+		, aa.a 특판매출, ab.a 반품처리, ac.a R1발주조정, ad.a 매장주문, ae.a 매장주문라인, af.a 택배주문, ag.a 택배주문라인, ah.a 매장출고예정량
+		, ai.a 매장입고확정수량 , aj.a 시식증정폐기점내이동, ak.a 가맹매출HEADER오전 , al.a 가맹매출LINE오전, am.a 직영매출HEADER오전, an.a 직영매출LINE오전
+		, ao.a 금종매출오전, ap.a 카드매출오전직영, aq.a 가맹매출HEADER오후, ar.a 가맹매출LINE오후, au.a 매출HEADER오후
+		, av.a 직영매출LINE오후, aw.a 금종매출오후, ay.a 카드매출오후
+     	
+     	FROM   ( SELECT count(*) a FROM TB_GOODS_INFO WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) a
+	        ,  ( SELECT count(*) a from OGH_INF_CLSGM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) b
+	        ,  ( SELECT count(*) a from OGH_INF_CLSLM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) c
+	        ,  ( SELECT count(*) a from OGH_INF_CLSMM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) d
+	        ,  ( SELECT count(*) a from OGH_INF_CLSSM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) e
+	        ,  ( SELECT count(*) a from OGH_INF_SHPCH_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) f
+	        ,  ( SELECT count(*) a from OGH_INF_SHPPT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) g
+	        ,  ( SELECT count(*) a from OGH_INF_SHOPM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) h
+	        ,  ( SELECT count(*) a from OGH_INF_COSTM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) i
+	        ,  ( SELECT count(*) a from OGH_INF_LPRIC_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) j
+	        ,  ( SELECT count(*) a from OGH_INF_GPRIC_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) k
+	        ,  ( SELECT count(*) a from OGH_INF_LOCTR_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) l
+	        ,  ( SELECT count(*) a from OGH_INF_DSHIP_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) n
+	        ,  ( SELECT count(*) a from OGH_INF_VENDR_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) m
+	        ,  ( SELECT count(*) a from OGH_INF_PDVND_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) o
+	        ,  ( SELECT count(*) a from OGH_INF_ORDLT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) p
+	        ,  ( SELECT count(*) a from OGH_INF_BMGHD_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) q
+	        ,  ( SELECT count(*) a from OGH_INF_BMGDT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) r
+	        ,  ( SELECT count(*) a from OGH_INF_BMMHD_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) s
+	        ,  ( SELECT count(*) a from OGH_INF_BMMDT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) t
+	        ,  ( SELECT count(*) a from OGH_INF_CBNHD_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) u
+	        ,  ( SELECT count(*) a from OGH_INF_CBNDT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) v
+	        ,  ( SELECT count(*) a from OGH_INF_DSVHD_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) w
+	        ,  ( SELECT count(*) a from OGH_INF_DSVDT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) x
+	        ,  ( SELECT count(*) a from OGH_INF_CODEM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) y
+	        ,  ( SELECT count(*) a from OGH_INV_LEDGER_SUB_SUM_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) z
+	        ,  ( SELECT count(*) a from OGH_INF_ORDPO_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) aa
+	        ,  ( SELECT count(*) a from OGH_INF_ORDRT_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) ab
+	        ,  ( SELECT count(*) a from OGH_INF_ORDMD_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) ac
+	        ,  ( SELECT count(*) a FROM OGH_HDR_IFACE_ALL_T WHERE INF_DATE = #{date} AND ITF_FLG = 'Y') ad
+	        ,  ( SELECT count(*) a FROM OGH_LIN_IFACE_ALL_T WHERE INF_DATE = #{date} AND ITF_FLG = 'Y') ae
+	        ,  ( SELECT count(*) a FROM OGH_HDR_IFACE_NO_T WHERE INF_DATE = #{date} AND ITF_FLG = 'Y') af
+	        ,  ( SELECT count(*) a FROM OGH_LIN_IFACE_NO_T WHERE INF_DATE = #{date} AND ITF_FLG = 'Y') ag
+	        ,  ( SELECT count(*) a from OGH_INF_ORDER_T WHERE ITF_DAT > TO_DATE(#{start}, 'YYYYMMDDHH24MISS')) ah
+	        ,  ( SELECT count(*) a FROM OGH_XWMS_STORE_TRX_IF_T WHERE INF_DATE = #{date}
+	          AND ITF_DAT BETWEEN TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{end}, 'YYYYMMDDHH24MISS')) ai
+	        ,  ( SELECT count(*) a FROM OGH_XINVS_STORE_TRX_IF_T WHERE INF_DATE = #{date}
+	          AND ITF_DAT BETWEEN TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{end}, 'YYYYMMDDHH24MISS')) aj
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_H_BYORGA_IF_T 
+	          WHERE ITF_DAT between  TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) ak
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_D_BYORGA_IF_T 
+	          WHERE ITF_DAT between  TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) al
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_HEADERS_IF_T 
+	          WHERE ITF_DAT between  TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) am
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_DETAILS_IF_T 
+	          WHERE ITF_DAT between  TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) an
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_CTRT_IF_T 
+	          WHERE ITF_DAT between  TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) ao
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_CARD_IF_T 
+	          WHERE ITF_DAT between  TO_DATE(#{start}, 'YYYYMMDDHH24MISS') AND TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) ap
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_H_BYORGA_IF_T
+	          WHERE ITF_DAT >  TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) aq
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_D_BYORGA_IF_T
+	          WHERE ITF_DAT >  TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) ar
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_HEADERS_IF_T
+	          WHERE ITF_DAT >  TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) au
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_DETAILS_IF_T
+	          WHERE ITF_DAT >  TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) av
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_CTRT_IF_T
+	          WHERE ITF_DAT >  TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) aw
+	        ,  ( SELECT count(*) a FROM OGH_POS_REV_CARD_IF_T
+	          WHERE ITF_DAT >  TO_DATE(#{term}, 'YYYYMMDDHH24MISS')) ay
+	</select>
+	
+</mapper>

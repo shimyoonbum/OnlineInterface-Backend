@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.pulmuone.OnlineIFServer.dao.CommonUIDao">
+	<select id="getSystems" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select system_id, system_nm
+		from systems
+		<if test="system_id != null">
+		where system_id = #{system_id}
+		</if>
+	</select>
+
+	<select id="getInterfaces" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select distinct i.if_id interface_id, i.if_nm interface_nm
+		from interfaces i
+		join ifuse u on u.if_id=i.if_id
+		where 1=1
+		<if test="system_id != null">
+		and u.system_id = #{system_id} 
+		</if>
+		and u.use_yn='Y' 
+		and i.if_id not like 'IF_META%' 
+		<!-- and if_id not like 'IF_TEST%'  -->
+		order by i.if_nm
+	</select>
+
+	<select id="getLogCount" parameterType="map" resultType="int">
+		select count(*) total 
+		from iflog l 
+		join interfaces i on i.if_id=l.if_id
+		join ifuse u on u.if_id=i.if_id and u.system_id=l.system_id and u.use_yn='Y'
+		where 1=1
+		<if test="dateFrom != null and dateFrom != ''">
+		and l.if_date between to_date(#{dateFrom}||'000000', 'YYYYMMDDHH24MISS') and to_date(#{dateTo}||'235959', 'YYYYMMDDHH24MISS')
+		</if>
+		<if test="systems != null and systems.size > 0">
+		and l.system_id in
+			 <foreach collection="systems" item="system"  open="(" close=")" separator=", ">
+				#{system.systemId}
+			 </foreach>
+		</if>
+		<if test="interfaces != null and interfaces.size > 0">
+		and l.if_id in
+			 <foreach collection="interfaces" item="interface"  open="(" close=")" separator=", ">
+				#{interface.interfaceId}
+			 </foreach>
+		</if>
+		<if test="ipaddress != null and ipaddress != ''">
+		and l.client like #{ipaddress}||'%'
+		</if>
+		<if test="statuses != null and statuses.size > 0">
+		and l.if_result in
+			 <foreach collection="statuses" item="status"  open="(" close=")" separator=", ">
+				#{status.statusId}
+			 </foreach>
+		</if>
+		<if test="dummys != null and dummys.size > 0">
+		and l.is_dummy in
+			 <foreach collection="dummys" item="dummy"  open="(" close=")" separator=", ">
+				#{dummy.dummyId}
+			 </foreach>
+		</if>
+		and l.if_id not like 'IF_META%' 
+		and l.if_id not like 'IF_TEST%'
+	</select>
+
+	<select id="getLogs" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select * from (
+			select x.*, rownum rn from (
+				select if_seq, to_char(l.if_date, 'YYYY-MM-DD HH24:MI:SS') if_date, l.if_id, i.if_nm, l.if_result, l.is_dummy, l.system_id, s.system_nm,
+				l.method, l.uri, to_char(l.param) param, l.client, l.server_id, l.time
+				from iflog l
+				join interfaces i on i.if_id=l.if_id
+				join ifuse u on u.if_id=i.if_id and u.system_id=l.system_id and u.use_yn='Y'
+				join systems s on s.system_id=l.system_id
+				where 1=1
+				<if test="dateFrom != null and dateFrom != ''">
+				and l.if_date between to_date(#{dateFrom}||'000000', 'YYYYMMDDHH24MISS') and to_date(#{dateTo}||'235959', 'YYYYMMDDHH24MISS')
+				</if>
+				<if test="systems != null and systems.size > 0">
+				and l.system_id in
+					 <foreach collection="systems" item="system"  open="(" close=")" separator=", ">
+						#{system.systemId}
+					 </foreach>
+				</if>
+				<if test="interfaces != null and interfaces.size > 0">
+				and l.if_id in
+					 <foreach collection="interfaces" item="interface"  open="(" close=")" separator=", ">
+						#{interface.interfaceId}
+					 </foreach>
+				</if>
+				<if test="ipaddress != null and ipaddress != ''">
+				and l.client like #{ipaddress}||'%'
+				</if>
+				<if test="statuses != null and statuses.size > 0">
+				and l.if_result in
+					 <foreach collection="statuses" item="status"  open="(" close=")" separator=", ">
+						#{status.statusId}
+					 </foreach>
+				</if>
+				<if test="dummys != null and dummys.size > 0">
+				and l.is_dummy in
+					 <foreach collection="dummys" item="dummy"  open="(" close=")" separator=", ">
+						#{dummy.dummyId}
+					 </foreach>
+				</if>
+				and l.if_id not like 'IF_META%' 
+				and l.if_id not like 'IF_TEST%' 
+				order by l.if_date desc
+			) x
+		)
+		where rn &gt; #{startRow} and rn &lt;= #{endRow}
+	</select>
+
+	<resultMap id="CamelMap" type="com.pulmuone.OnlineIFServer.util.CamelListMap" >
+	    <result property="req_json" column="req_json" jdbcType="CLOB" javaType="java.lang.String"/>
+	    <result property="res_json" column="res_json" jdbcType="CLOB" javaType="java.lang.String"/>
+	</resultMap>
+
+	<select id="getLog" parameterType="map" resultMap="CamelMap">
+		select if_seq, to_char(if_date, 'YYYY-MM-DD HH24:MI:SS') if_date, method, uri, to_char(param) param, req_json, res_json
+		from iflog
+		where if_seq=#{ifSeq}
+	</select>
+
+	<select id="getDummies" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select to_char(d.if_seq) if_seq, d.system_id, d.if_id, i.if_nm, d.dummy_nm, d.active, d.res_json
+		from ifdummy d
+		join interfaces i on i.if_id=d.if_id
+		join ifuse u on u.if_id=i.if_id and u.system_id=d.system_id and u.use_yn='Y'
+		where d.system_id=#{systemId}
+		order by i.if_nm, d.dummy_nm
+	</select>
+
+	<insert id="insertDummy" parameterType="map">
+		<selectKey keyProperty="if_seq" resultType="int" order="AFTER">
+		select max(if_seq) if_seq from ifdummy
+		</selectKey>
+		
+		insert into ifdummy 
+				(system_id, if_id, dummy_nm, active, res_json)
+		values(#{systemId},#{ifId},#{dummyNm},#{active},#{resJson})
+	</insert>
+
+	<update id="updateDummy" parameterType="map">
+		update ifdummy 
+		set   dummy_nm = #{dummyNm}
+			<if test="ifId != null and ifId != ''">
+			, if_id = #{ifId}
+			</if>
+			<if test="active != null and active != ''">
+			, active = #{active}
+			</if>
+			, res_json = #{resJson} 
+		where if_seq = #{ifSeq}
+	</update>
+
+	<delete id="deleteDummy" parameterType="map">
+		delete ifdummy 
+		where if_seq = #{ifSeq}
+	</delete>
+	
+	<select id="getDate" parameterType="map" resultType="map">
+		select to_char(sysdate, 'YY-MM-DD') day1,
+		to_char(sysdate-1, 'YY-MM-DD') day2,
+		to_char(sysdate-2, 'YY-MM-DD') day3,
+		to_char(sysdate-3, 'YY-MM-DD') day4,
+		to_char(sysdate-4, 'YY-MM-DD') day5,
+		to_char(sysdate-5, 'YY-MM-DD') day6,
+		to_char(sysdate-6, 'YY-MM-DD') day7
+		from dual
+	</select>
+	
+	<select id="getSuccessCount" parameterType="map" resultType="map">
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY7}
+		AND IF_RESULT IN ('000', '103')
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+		UNION ALL
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY6}
+		AND IF_RESULT IN ('000', '103')
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+		UNION ALL
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY5}
+		AND IF_RESULT IN ('000', '103')	
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+		UNION ALL
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY4}
+		AND IF_RESULT IN ('000', '103')	
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+		UNION ALL
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY3}
+		AND IF_RESULT IN ('000', '103')	
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+		UNION ALL
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY2}
+		AND IF_RESULT IN ('000', '103')	
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+		UNION ALL
+		select count(*) success
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY1}
+		AND IF_RESULT IN ('000', '103')
+		<if test="system != null and system != ''">
+			AND SYSTEM_ID = #{system}		
+		</if>
+	</select>
+	<select id="getFailCount" parameterType="map" resultType="map">
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY7}
+		AND IF_RESULT NOT IN ('000', '103')
+		UNION ALL
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY6}
+		AND IF_RESULT NOT IN ('000', '103')
+		UNION ALL
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY5}
+		AND IF_RESULT NOT IN ('000', '103')
+		UNION ALL
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY4}
+		AND IF_RESULT NOT IN ('000', '103')
+		UNION ALL
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY3}
+		AND IF_RESULT NOT IN ('000', '103')
+		UNION ALL
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY2}
+		AND IF_RESULT NOT IN ('000', '103')
+		UNION ALL
+		select count(*) fail
+		from iflog
+		WHERE to_char(if_date, 'YY-MM-DD') = #{DAY1}
+		AND IF_RESULT NOT IN ('000', '103')
+	</select>
+</mapper>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="60 seconds">
+ 
+    <conversionRule conversionWord="clr" converterClass="org.springframework.boot.logging.logback.ColorConverter" />
+    
+    <property name="LOG_FILE" value="log-file"/>
+    <property name="LOG_ERR_FILE" value="err_log-file"/>
+    <property name="LOG_PATH" value="/log"/>
+    <property name="MAX_FILE_SIZE" value="10MB"/>
+    <property name="MAX_HISTORY" value="30"/>
+    <property name="LOG_PATTERN_CONSOLE"
+    value="%d{yyyy-MM-dd HH:mm:ss.SSS} %green([%thread]) %highlight(%-5level) [%clr(%-40.40logger{39}){cyan}] - %msg%n"/>
+    <property name="LOG_PATTERN"
+    value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+    
+    <springProfile name="log-file">
+        <logger name="jdbc" level="OFF"/>
+        <logger name="jdbc.sqlonly" level="OFF"/>
+        <logger name="jdbc.sqltiming" level="OFF"/>
+        <logger name="jdbc.audit" level="OFF"/>
+        <logger name="jdbc.resultset" level="OFF"/>
+        <logger name="jdbc.resultsettable" level="OFF"/>
+        <logger name="jdbc.connection" level="OFF"/>
+        
+        <include resource="appenders/appender-file.xml" />
+          <root level="INFO">
+            <appender-ref ref="FILE" />
+            <appender-ref ref="ERROR" />
+          </root>
+          
+    </springProfile>
+    
+    <springProfile name="log-console">
+        <logger name="jdbc" level="OFF"/>
+        <logger name="jdbc.sqlonly" level="OFF"/>
+        <logger name="jdbc.sqltiming" level="DEBUG"/>
+        <logger name="jdbc.audit" level="OFF"/>
+        <logger name="jdbc.resultset" level="OFF"/>
+        <logger name="jdbc.resultsettable" level="OFF"/>
+        <logger name="jdbc.connection" level="OFF"/>
+        
+        <include resource="appenders/appender-console.xml" />
+          <root level="INFO">
+              <appender-ref ref="CONSOLE" />
+          </root>
+    </springProfile>
+</configuration>

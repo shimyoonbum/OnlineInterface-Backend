@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.pulmuone.OnlineIFServer.dao.UserDao">
+	<select id="getUser" parameterType="map" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		select id, first_name, last_name, city, country, phone_no, email_id 
+		from test_user
+	</select>
+
+	<select id="findById" parameterType="long" resultType="com.pulmuone.OnlineIFServer.util.CamelListMap">
+		SELECT * 
+		FROM test_user 
+		WHERE ID = #{id}
+	</select>
+
+	<delete id="deleteUserById" parameterType="long">
+		delete from test_user where id = #{id}
+	</delete>
+
+	<insert id="saveUser" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+		insert into test_user 
+				(id, first_name, last_name, city, country, phone_no, email_id)
+		values(#{id},#{firstName},#{lastName},#{city},#{country},#{phoneNo},#{emailId})
+	</insert>
+
+	<update id="updateUser" parameterType="map">
+		update test_user 
+		set   first_name = #{firstName}
+			, last_name = #{lastName}
+			, city = #{city} 
+			, country = #{country}
+			, phone_no = #{phoneNo} 
+			, email_id = #{emailId} 
+		where id = #{id}
+	</update>
+</mapper>
