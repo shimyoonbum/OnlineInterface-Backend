@@ -21,6 +21,7 @@ target/
 /config/keystore
 /logs
 /errorlogs
+/config
 /gradle
 /sql
 data.txt
