@@ -20,6 +20,8 @@ public class Constants {
 	public final static String mandatory = "mandatory";
 	public final static String useYn = "useYn";
 	public final static String updRestirct = "updrestirct";
+	public final static String replaceYn = "replaceCol";
+	public final static String nvlYn = "nvlCol";
 	
 	///mandatory 속성
 	public final static String systemMandatory = "S";	//입력시 필수 체크

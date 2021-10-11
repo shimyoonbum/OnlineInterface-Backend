@@ -43,7 +43,8 @@ public class MetaServiceSelect {
     private final static String valueTemp = "value";
     private final static String restrictTemp = "restrict";
     private final static String restrictTemp2 = "restrict2";
-
+    private final static String replaceTemp = "replace";
+    
     @Autowired
     JdbcTemplate jdbcTemplate;
 
@@ -58,7 +59,6 @@ public class MetaServiceSelect {
 			} catch (Exception e) {
 				throw new IFException(ResponseStatus.SEARCH, "_filter 조건의 json 형식에 오류가 있습니다.");
 			}
-			String display = commonMap.get(Constants.filter)==null? null: commonMap.get(Constants.filter).toString();
 		}
 		
 		getSqlPart(parentMap, metaMap, commonMap, filterMap, paramMap, resultMap);
@@ -101,6 +101,7 @@ public class MetaServiceSelect {
     	StringBuffer sbCol = new StringBuffer();
     	StringBuffer sbWhere = new StringBuffer();
     	StringBuffer sbOrderBy = new StringBuffer();
+    	StringBuffer sbReplace = new StringBuffer();
     	List<Object> listValue = null;
 		if(resultMap.get(valueTemp)==null) {
 			listValue = new ArrayList<Object>();
@@ -205,8 +206,9 @@ public class MetaServiceSelect {
 		boolean needOrderByComma = false;
 		
 		//2-23 SIM 날짜 관련 검색 조건 추가
-		String toCharKey = null;
-		String toCharValue = null;
+		// 5_20 to_char 관련 쿼리 추가 여부(배열 시 쿼리 하나만 추가하도록 함)
+		List<String> toCharKey = new ArrayList<>();
+		List<String> toCharValue = new ArrayList<>();
 		
 		Set set = commonMap.entrySet();
 		Iterator iterator = set.iterator();
@@ -214,8 +216,8 @@ public class MetaServiceSelect {
 		    Map.Entry entry = (Map.Entry)iterator.next();
 		  
 		    if(((String) entry.getKey()).contains("toChar")) {
-			    toCharKey = (String)entry.getKey();
-			    toCharValue = (String)entry.getValue();
+			    toCharKey.add((String)entry.getKey());
+			    toCharValue.add((String)entry.getValue());
 		    }
 		}
 		
@@ -229,25 +231,46 @@ public class MetaServiceSelect {
     		}
     		
     		String useYn = metaAttr.get(Constants.useYn).toString();
+    		//String replaceYn = metaAttr.get(Constants.replaceYn).toString();
     		///System.out.println("ifCol:"+ifCol+",useYn:"+useYn);
     		if(useYn==null || useYn.equals("N"))
-    			continue;
+    			continue;    		
     		
     		String dbCol = metaAttr.get(Constants.dbCol).toString();
     		String aCol = alias+"."+dbCol;
     		String inConv = (metaAttr.get(Constants.inConv) == null)? null : metaAttr.get(Constants.inConv).toString();
     		String outConv = (metaAttr.get("outConv") == null)? null : metaAttr.get("outConv").toString();
 
-    		if(needComma)
-    			sbCol.append(",");
-    		if(outConv==null)
-    			//01-15 Validation 처리 쿼리 추가
-    			sbCol.append("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("+ aCol + ", CHR(9), ''), CHR(10), ''), CHR(13), ''), CHR(34), ''), CHR(92), '') "+ dbCol);
-//    			sbCol.append(aCol);
-    		else
-    			sbCol.append(outConv.replaceAll("\\$", aCol)+" "+dbCol);
     		
-    		needComma = true;    			
+    		if(needComma) {
+    			sbCol.append(",");  
+				sbReplace.append(",");
+    		}
+
+    		if(outConv==null) 
+    			sbCol.append(aCol);    		
+    		else
+    			sbCol.append(outConv.replaceAll("\\$", aCol)+" "+dbCol);    	
+    		
+    		
+    		//6-9 sim 나중에 replace 제어시에 플래그값 이용 요망.
+    		//if(replaceYn.equals("Y")) {
+    		//	sbReplace.append("REGEXP_REPLACE("+ dbCol +", '['||chr(13)||chr(10)||CHR(9)||CHR(34)||CHR(92)||']+','')"+ dbCol);
+    		//}else {
+    			//sbReplace.append(dbCol);
+    		//}
+    		
+    		//6-9 sim header 및 line replace를 위해 다음과 같이 replace문 추가.
+    		if(path.equals("header"))
+    			sbReplace.append("REGEXP_REPLACE("+ dbCol +", '['||chr(13)||chr(10)||CHR(9)||CHR(34)||CHR(92)||']+','')"+ dbCol);
+    		else {
+    			if(outConv==null) 
+    				sbReplace.append("REGEXP_REPLACE("+ aCol +", '['||chr(13)||chr(10)||CHR(9)||CHR(34)||CHR(92)||']+','')"+ dbCol);    		
+        		else
+        			sbReplace.append(outConv.replaceAll("\\$", aCol)+" "+dbCol); 
+    		}
+    		
+    		needComma = true; 	
 			
     		if(!ifCol.equals(Constants.target) && !ifCol.equals(Constants.page) && commonMap.get(ifCol)!=null) { //search condition	
     			
@@ -283,68 +306,112 @@ public class MetaServiceSelect {
                 		                		
         			} else {
                 		if(inConv==null) {
+                			//5-17 sim 숫자 관련 > (이상), < (이하) , null 체크 추가
                 			if(val.startsWith("_in")) {
                 				val = val.substring(3, val.length());
                 				sbWhere.append(aCol+" in "+val+" ");
-                			} else
-                			if(val.indexOf("%") < 0) {
+                			} else if(val.startsWith(">")) {
+                				val = val.substring(2, val.length());
+                				sbWhere.append(aCol+">= ? ");
+                    			listValue.add(val);
+                			} else if(val.startsWith("<")) {
+                				val = val.substring(2, val.length());
+                				sbWhere.append(aCol+"<= ? ");
+                    			listValue.add(val);
+                			} else if(val.startsWith("isNull")) {
+                    			sbWhere.append(aCol+" is null ");
+                			} else if(val.indexOf("%") < 0) {
                 				sbWhere.append(aCol+"=? ");
                     			listValue.add(val);
-                			}
-                			else {
+                			} else {
                 				sbWhere.append(aCol+" like ? ");
                     			listValue.add(val);
-                			}
+                			} 
                 		} else {
-                			sbWhere.append(aCol+"="+inConv.replaceAll("\\$", "?")+" ");
-                			listValue.add(val);
+                			//5-17 sim 날짜 관련 > (이상), < (이하) , null 체크 추가
+                			if(val.startsWith(">")) {
+                				val = val.substring(2, val.length());
+                    			sbWhere.append(aCol+">="+inConv.replaceAll("\\$", "?")+" ");
+                    			listValue.add(val);
+                			} else if(val.startsWith("<")) {
+                				val = val.substring(2, val.length());
+                    			sbWhere.append(aCol+"<="+inConv.replaceAll("\\$", "?")+" ");
+                    			listValue.add(val);
+                			} else if(val.startsWith("isNull")) {
+                    			sbWhere.append(aCol+" is null ");
+                			} else {
+                				sbWhere.append(aCol+"="+inConv.replaceAll("\\$", "?")+" ");
+                    			listValue.add(val);
+                			}
                 		}
         			}
     			}
     		} // if target && !page	
     		
     		//2-23 SIM 조회 _toChar 조건 추가
-    		if(toCharKey != null) {    			
+    		if(toCharKey != null) {   
     			
-    			String col = toCharKey.split("_")[0];
-        		String cond = toCharKey.split("_")[2];    
-        		if(col.equals(ifCol)) {
-        			
-            		logger.debug("조건 컬럼 : " + col);
-            		logger.debug("TO_CHAR 조건 : " + cond);
-            		
-            		if(inConv==null)
-    					throw new IFException(ResponseStatus.NOT_DATE, "컬럼("+col+") 은 날짜 형식이 아닙니다.");
-            		
-            		if(needAnd)
-            			sbWhere.append("and ");
-            		
-        			int index = toCharValue.indexOf("~");
-        			if(index > 0) {
-        				String fromVal = toCharValue.substring(0, index);
-        				String toVal = toCharValue.substring(index+1).trim();
-        				
-        				if(fromVal.length() != cond.length() || toVal.length() != cond.length())
-        					throw new IFException(ResponseStatus.NOT_DATE, "컬럼("+col+") 의  param value 형식이 날짜 변환 형식과 맞지 않습니다.");
-        				
-        				sbWhere.append("to_char("+aCol+" , '"+cond+"') between ? and ? ");
-        				needAnd = true;
-        				
-        				listValue.add(fromVal);
-                		listValue.add(toVal);
+    			for(int i = 0; i < toCharKey.size(); i++) {
+    				String col = toCharKey.get(i).split("_")[0];
+            		String cond = toCharKey.get(i).split("_")[2];    
+            		if(col.equals(ifCol)) {
+            			
+                		logger.debug("조건 컬럼 : " + col);
+                		logger.debug("TO_CHAR 조건 : " + cond);
                 		
-        			}else {
-        				String value = toCharValue.trim();
-        				
-        				if(value.length() != cond.length())
-        					throw new IFException(ResponseStatus.NOT_DATE, "컬럼("+col+") 의  param value 형식이 날짜 변환 형식과 맞지 않습니다.");
-        				
-        				sbWhere.append("to_char("+aCol+" , '"+cond+"') = ?");
-        				needAnd = true;
-        				
-            			listValue.add(value);
-        			}
-        		}        			
+                		if(inConv==null)
+        					throw new IFException(ResponseStatus.NOT_DATE, "컬럼("+col+") 은 날짜 형식이 아닙니다.");
+                		
+                		if(needAnd)
+                			sbWhere.append("and ");
+                		
+            			int index = toCharValue.get(i).indexOf("~");
+            			if(index > 0) {
+            				String fromVal = toCharValue.get(i).substring(0, index);
+            				String toVal = toCharValue.get(i).substring(index+1).trim();
+            				
+            				if(fromVal.length() != cond.length() || toVal.length() != cond.length())
+            					throw new IFException(ResponseStatus.NOT_DATE, "컬럼("+col+") 의  param value 형식이 날짜 변환 형식과 맞지 않습니다.");
+            				
+            				sbWhere.append("to_char("+aCol+" , '"+cond+"') between ? and ? ");
+            				needAnd = true;
+            				
+            				listValue.add(fromVal);
+                    		listValue.add(toVal);
+                    		
+            			}else {
+            				String value = toCharValue.get(i).trim();
+            				
+            				//5-18 sim toChar_YYYYMMDD >= 20210401 조건, isNull 조건 추가 관련 설계
+            				if(value.startsWith(">")) {
+            					value = value.substring(2, value.length());  
+            					validateValue(value, cond, col);     
+
+                				sbWhere.append("to_char("+aCol+" , '"+cond+"') >= ? ");
+                    			listValue.add(value);
+            					
+            				}else if(value.startsWith("<")) {
+            					value = value.substring(2, value.length());        					
+            					validateValue(value, cond, col);
+
+                				sbWhere.append("to_char("+aCol+" , '"+cond+"') <= ? ");
+                    			listValue.add(value);
+            					
+            				}else if(value.startsWith("isNull")) {
+
+                				sbWhere.append("to_char("+aCol+" , '"+cond+"') is null ");
+            					
+            				}else {        					
+                				validateValue(value, cond, col);                   				
+
+                				sbWhere.append("to_char("+aCol+" , '"+cond+"') = ? ");
+                    			listValue.add(value);
+            				}
+            				        				
+            				needAnd = true;            				
+            			}
+            		}        			
+    			}    			
     		}
     		
     		if(parent != null && metaAttr.get(Constants.parentCol) != null) {
@@ -363,8 +430,9 @@ public class MetaServiceSelect {
     				
     				if(needOrderByComma)
     					sbOrderBy.append(",");
+    				
     				sbOrderBy.append(dbCol+" "+orders[2]);
-//    				sbOrderBy.append(aCol+" "+orders[2]);
+    				
     				needOrderByComma = true;
     			}
     		}
@@ -375,10 +443,18 @@ public class MetaServiceSelect {
 		sqlMap.put(columnTemp, sbCol.toString());
 		sqlMap.put(whereTemp, sbWhere.toString());
 		sqlMap.put(orderTemp, sbOrderBy.toString());
+		sqlMap.put(replaceTemp, sbReplace.toString());
 		sqlMap.put(restrictTemp, restrictCondition);
 		sqlMap.put(restrictTemp2, restrictCondition2);
 		
 		resultMap.put(path, sqlMap);
+	}
+
+	//5-18 SIM to_char 함수의 value와 조건의 길이가 일치하는지 체크. YYYYMMDD / YYYYMM 관련 체크
+	private void validateValue(String value, String cond, String col) throws IFException {
+		
+		if(value.length() != cond.length())
+			throw new IFException(ResponseStatus.NOT_DATE, "컬럼("+col+") 의  param value 형식이 날짜 변환 형식과 맞지 않습니다.");		
 	}
 
 	private boolean setChildSql(Map metaMap, Map<String,Object> resultMap) {
@@ -434,6 +510,7 @@ public class MetaServiceSelect {
 		String systemId = commonMap.get(Constants.systemId).toString();
 		Map<String,Object> sqlMap = (Map<String,Object>) resultMap.get(path);
 		String column = sqlMap.get(columnTemp).toString();
+		String replace = sqlMap.get(replaceTemp).toString();
 		
 		List<Object> value = (List<Object>) resultMap.get(valueTemp);
 		Object[] values = new Object[value.size()];
@@ -444,8 +521,13 @@ public class MetaServiceSelect {
 		String order = (String) resultMap.get(orderTemp);
 		String restrict = (String) resultMap.get(restrictTemp);
 		String restrict2 = (String) resultMap.get(restrictTemp2);
-				
-    	String sql = "select distinct "+column+" from "+table;
+		String sql = null;
+		
+		if(path.equals("header"))
+			sql = "select distinct "+column+" from "+table;
+		else
+			sql = "select distinct "+replace+" from "+table;
+		
     	if(!where.trim().equals(""))
     		sql += " where "+where;
     	if(order!=null && order.length() > 0)
@@ -479,7 +561,9 @@ public class MetaServiceSelect {
 				resultMap.put(Constants.currentPage, searchPage);
 				resultMap.put(Constants.pageSize, pageSize);
 				
-		    	sql = "select * from (select rownum rn_, x.* from ("+sql+") x) where rn_ > "+((searchPage-1)*pageSize)+" and rn_ <= "+(searchPage*pageSize);
+		    	sql = "select rn_," + replace + " from (select rownum rn_, x.* from ("+sql+") x) where rn_ > "+((searchPage-1)*pageSize)+" and rn_ <= "+(searchPage*pageSize);
+				//sql = "select * from (select rownum rn_, x.* from ("+sql+") x) where rn_ > "+((searchPage-1)*pageSize)+" and rn_ <= "+(searchPage*pageSize);
+				
 			}
 			
 			logger.debug("쿼리 : " + sql+";\n 변수 : "+CUtil.convertObjectArrayToJsonString(values)+"\n");
@@ -572,4 +656,6 @@ public class MetaServiceSelect {
     	
     	return matched;
 	}
+	
+	
 }

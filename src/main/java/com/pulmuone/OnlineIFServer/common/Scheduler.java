@@ -20,10 +20,15 @@ public class Scheduler {
 	@Autowired
 	DBCleanConfig dbCleanConfig;
 
-    @Scheduled(initialDelay = 6000,fixedDelay = 60000)
+	@Scheduled(cron="0 0 04 * * ?")
+	//@Scheduled(initialDelay = 6000,fixedDelay = 60000)
     public void fixedDelayJob() {
         try {
-        	dbCleanConfig.clearTables();
+        	//서버 id
+    		String server = System.getProperty("server.id");
+    		
+    		if(!server.equals("prd1"))
+    			dbCleanConfig.clearTables();
 		} catch (Exception e) {
 			logger.error(e.getMessage());
 		}

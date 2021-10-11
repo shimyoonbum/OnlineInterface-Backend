@@ -56,11 +56,12 @@ public class MetaServiceUpdate {
 
 	private String flagOnly = null;
 
-	public String[] updateChildMap(Map parentMap, Map metaMap, Map<String, Object> commonMap, Map<String, Object> paramMap) throws IFException {
+	public String[] updateChildMap(Map parentMap, Map metaMap, Map<String, Object> commonMap,
+			Map<String, Object> paramMap) throws IFException {
 		Map<String, Object> resultMap = new HashMap<String, Object>();
-		
+
 		Connection connStack = null;
-		ConnectionCommon connect = ConnectionCommon.getInstance();		
+		ConnectionCommon connect = ConnectionCommon.getInstance();
 
 		this.flagOnly = (String) metaMap.get(Constants.flagOnly);
 
@@ -69,8 +70,8 @@ public class MetaServiceUpdate {
 		setChildSql(metaMap, resultMap);
 
 		try {
-			
-			connStack = connect.beginTransaction(jdbcTemplate);		
+
+			connStack = connect.beginTransaction(jdbcTemplate);
 			updateChild(connect, connStack, metaMap, commonMap, paramMap, resultMap);
 			connect.endTransaction(connStack, true);
 
@@ -156,10 +157,22 @@ public class MetaServiceUpdate {
 			sqlMap.put("dataList", dataList);
 		}
 
+		List<List> charList = (List<List>) sqlMap.get("charList");
+		if (charList == null) {
+			charList = new ArrayList<List>();
+			sqlMap.put("charList", charList);
+		}
+
+		Map nullList = (Map) sqlMap.get("nullList");
+		if (nullList == null) {
+			nullList = new HashMap();
+			sqlMap.put("nullList", nullList);
+		}
+
 		List<Object[]> setList = new ArrayList<Object[]>();
 		List<Object[]> whereList = new ArrayList<Object[]>();
 		Map<String, Object> dataMap = new HashMap<String, Object>();
-		Map<String, Object> charMap = new HashMap<String, Object>();
+		List<Map<String, Object>> charTempList = new ArrayList<>();
 
 		String alias = metaMap.get(Constants.alias).toString();
 		String aliasParent = (parentMap.get(Constants.alias) == null) ? null
@@ -213,12 +226,18 @@ public class MetaServiceUpdate {
 				Map.Entry entry = (Map.Entry) iterator.next();
 
 				if (((String) entry.getKey()).contains("toChar")) {
+
+					Map<String, Object> charMap = new HashMap<>();
+
 					charMap.put(entry.getKey().toString().split("_")[0], (String) entry.getValue());
 					charMap.put("toKey", entry.getKey().toString().split("_")[0]);
 					charMap.put("toValue", entry.getValue().toString());
 					charMap.put("format", entry.getKey().toString().split("_")[2]);
 					charMap.put("toChar", entry.getKey().toString());
+
+					charTempList.add(charMap);
 				}
+
 			}
 		}
 
@@ -230,9 +249,12 @@ public class MetaServiceUpdate {
 				continue;
 
 			String dbCol = metaAttr.get(Constants.dbCol).toString();
+			String nvlYn = metaAttr.get(Constants.nvlYn).toString();
 			String aCol = alias + "." + dbCol;
 			Object[] col = new Object[3];
-			String inConv = (metaAttr.get("inConv") == null) ? "?"
+			
+			//9-27 	nvl 여부에 따라 ? 혹은 ! 로 구분하기 위해 삼항연산자절 추가 수정
+			String inConv = (metaAttr.get("inConv") == null) ? (nvlYn.equals("N") ? "?" : "!")
 					: metaAttr.get("inConv").toString().replaceAll("\\$", "?");
 			String outConv = (metaAttr.get("outConv") == null) ? null : metaAttr.get("outConv").toString();
 			col[0] = aCol;
@@ -252,7 +274,9 @@ public class MetaServiceUpdate {
 				String parentCol = aliasParent + "." + metaAttr.get(Constants.parentCol).toString();
 				if (needAnd)
 					sbWhere.append("\t   and ");
-				sbWhere.append("(" + aCol + " is null or " + aCol + "=" + parentCol + ") \n");
+				//8-17 조인 where 절 에서 null 비교 여부 제외
+				//sbWhere.append("(" + aCol + " is null or " + aCol + "=" + parentCol + ") \n");
+				sbWhere.append("(" + aCol + "=" + parentCol + ") \n");
 				needAnd = true;
 			} // if parent
 
@@ -261,50 +285,81 @@ public class MetaServiceUpdate {
 				col[2] = val;
 				setList.add(col);
 			} else if (conditionMap.get(ifCol) != null) {
-				col[2] = conditionMap.get(ifCol);
-				whereList.add(col);
+
+				// 5-21 sim isNull 조건일 경우 nullList에 따로 넣고, condtion param값은 제거.
+				if (conditionMap.get(ifCol).equals("isNull")) {
+
+					nullList.put(aCol, "isNull");
+					conditionMap.remove(ifCol);
+					continue;
+				}				
+				
+				String val = conditionMap.get(ifCol).toString();
+				// 8-12 변수 NULL값 들어올 시에 제외 로직
+				if(!CUtil.isEmpty(val)) {
+					col[2] = conditionMap.get(ifCol);
+					whereList.add(col);					
+				}				
 			}
 
 			// 2-25 sim where 절 to_char 설계
-			if (charMap.get(ifCol) != null) {
-				String charVal = charMap.get(ifCol).toString();
+			for (Map charMap : charTempList) {
+				if (charMap.get(ifCol) != null) {
+					String charVal = charMap.get(ifCol).toString();
 
-				if (inConv.equals("?"))
-					throw new IFException(ResponseStatus.NOT_DATE, "컬럼(" + ifCol + ") 은 날짜 형식이 아닙니다.");
+					if (inConv.equals("?"))
+						throw new IFException(ResponseStatus.NOT_DATE, "컬럼(" + ifCol + ") 은 날짜 형식이 아닙니다.");
 
-				if (charVal != null) {
+					if (charVal != null) {
 
-					int format = charMap.get("format").toString().length();
-					int val = charVal.length();
+						int format = charMap.get("format").toString().length();
+						int val = charVal.length();
 
-					if (charVal.contains("~")) {
+						if (charVal.contains("~")) {
+							charMap.replace("toKey", dbCol);
+
+							int fromVal = charVal.split("~")[0].length();
+							int toVal = charVal.split("~")[1].length();
+
+							if (fromVal != format || toVal != format)
+								throw new IFException(ResponseStatus.NOT_DATE, charMap.get("toChar")
+										+ "조건의 value 형식이 날짜 변환 형식(" + charMap.get("format") + ")과 맞지 않습니다.");
+							continue;
+						}
+
+						if (charVal.startsWith(">") || charVal.startsWith("<")) {
+							charMap.replace("toKey", dbCol);
+							if (format != (val - 2))
+								throw new IFException(ResponseStatus.NOT_DATE, charMap.get("toChar")
+										+ "조건의 value 형식이 날짜 변환 형식(" + charMap.get("format") + ")과 맞지 않습니다.");
+							continue;
+
+						} else if (charVal.startsWith("isNull")) {
+							charMap.replace("toKey", dbCol);
+							continue;
+						} else {
+							if (format != val)
+								throw new IFException(ResponseStatus.NOT_DATE, charMap.get("toChar")
+										+ "조건의 value 형식이 날짜 변환 형식(" + charMap.get("format") + ")과 맞지 않습니다.");
+						}
+
+						Object[] charCol = new Object[3];
+						charCol[0] = "to_char(" + aCol + ", '" + charMap.get("format") + "')";
+						charCol[1] = "?";
+						charCol[2] = charMap.get(ifCol);
+						whereList.add(charCol);
+
 						charMap.replace("toKey", dbCol);
-
-						int fromVal = charVal.split("~")[0].length();
-						int toVal = charVal.split("~")[1].length();
-
-						if (fromVal != format || toVal != format)
-							throw new IFException(ResponseStatus.NOT_DATE, charMap.get("toChar")
-									+ "조건의 value 형식이 날짜 변환 형식(" + charMap.get("format") + ")과 맞지 않습니다.");
-						continue;
 					}
-
-					if (format != val)
-						throw new IFException(ResponseStatus.NOT_DATE, charMap.get("toChar") + "조건의 value 형식이 날짜 변환 형식("
-								+ charMap.get("format") + ")과 맞지 않습니다.");
-
-					Object[] charCol = new Object[3];
-					charCol[0] = "to_char(" + aCol + ", '" + charMap.get("format") + "')";
-					charCol[1] = "?";
-					charCol[2] = charMap.get(ifCol);
-					whereList.add(charCol);
-
-					charMap.replace("toKey", dbCol);
 				}
 			}
-
-			if (conditionMap.get(ifCol) != null)
-				dataMap.put(dbCol, conditionMap.get(ifCol));
+			//값이 존재하지 않으면 pass
+			if(conditionMap.get(ifCol) != null) {
+				String val = conditionMap.get(ifCol).toString();
+				if(!CUtil.isEmpty(val))
+					dataMap.put(dbCol, conditionMap.get(ifCol));				
+			}
+				
 
 			// 2021-3-3 sim 업데이트 제한 컬럼 조건 추가
 			if (metaAttr.get(Constants.updRestirct) != null) {
@@ -321,9 +376,10 @@ public class MetaServiceUpdate {
 		if (this.flagOnly != null && this.flagOnly.equals("Y") && setList.size() > 0)
 			throw new IFException(ResponseStatus.UPD_COND, "flag 업데이트만 가능합니다.");
 
-		if (!charMap.isEmpty())
-			paramMap.put("charMap", charMap);
+		if (!charTempList.isEmpty())
+			paramMap.put("charMap", charTempList);
 		dataList.add(dataMap);
+		charList.add(charTempList);
 
 		setColumns.add(setList);
 		whereColumns.add(whereList);
@@ -408,8 +464,9 @@ public class MetaServiceUpdate {
 	}
 
 	@SuppressWarnings("unchecked")
-	private void executeUpdate(ConnectionCommon connect, Connection connStack, Map metaMap, Map<String, Object> commonMap,
-			Map<String, Object> paramMap, Map<String, Object> resultMap) throws IFException {
+	private void executeUpdate(ConnectionCommon connect, Connection connStack, Map metaMap,
+			Map<String, Object> commonMap, Map<String, Object> paramMap, Map<String, Object> resultMap)
+			throws IFException {
 		String path = metaMap.get(Constants.path).toString();
 		String systemId = commonMap.get(Constants.systemId).toString();
 		String alias = metaMap.get(Constants.alias).toString();
@@ -456,7 +513,7 @@ public class MetaServiceUpdate {
 
 		boolean needComma = false;
 		int seq = 0;
-		sbSql.append(" set ");
+		sbSql.append("set ");
 		String target = (commonMap.get(Constants.target) == null) ? null : commonMap.get(Constants.target).toString();
 		boolean foundTarget = false;
 		if (target != null) {
@@ -472,11 +529,16 @@ public class MetaServiceUpdate {
 				foundTarget = true;
 			}
 		}
-
+		//9-30 update set절에 nvl 처리를 하는 컬럼이 들어올 시에, value 값이 !로 들어오는 문제 해결.
 		for (Entry<String, Object> entry : attrs.entrySet()) {
 			if (needComma)
 				sbSql.append(", ");
-			sbSql.append(entry.getKey() + "=" + entry.getValue() + " ");
+			
+			if(entry.getValue().equals("!"))
+				sbSql.append(entry.getKey() + "=? ");
+			else
+				sbSql.append(entry.getKey() + "=" + entry.getValue() + " ");
+				
 			entry.setValue(seq++);
 			needComma = true;
 		}
@@ -519,9 +581,24 @@ public class MetaServiceUpdate {
 		}
 
 		attrs = new HashMap<String, Object>();
-		for (List<Object[]> list : whereColumns)
-			for (Object[] col : list)
-				attrs.put(col[0].toString(), col[1].toString());
+		for (List<Object[]> list : whereColumns) {
+			for (Object[] col : list) {
+				//8-20 String null 체크 추가
+				String val = CUtil.nullString(col[2].toString(), "");
+				
+				// 5-20 sim where 조건절에 이상/이하/null 조건절 추가
+				if (val.startsWith(">"))
+					attrs.put(col[0].toString(), ">" + col[1].toString());
+				else if (val.startsWith("<"))
+					attrs.put(col[0].toString(), "<" + col[1].toString());
+				else if (val.equals("isNull"))
+					attrs.put(col[0].toString(), col[2].toString());
+				else if (val.equals(""))
+					attrs.put(col[0].toString(), "");
+				else
+					attrs.put(col[0].toString(), col[1].toString());
+			}
+		}
 
 		boolean needAnd = false;
 		seq = 0;
@@ -529,9 +606,26 @@ public class MetaServiceUpdate {
 		for (Entry<String, Object> entry : attrs.entrySet()) {
 			if (needAnd)
 				sbSql.append("\t   and ");
-			//4-16 UPDATE 쿼리 수정 진행
-//			sbSql.append("(? is null or " + entry.getKey() + " is null or " + entry.getKey() + "=?) \n");
-			sbSql.append("(? is null or " + entry.getKey() + "=?) \n");
+
+			// 5-20 sim where 조건절에 이상/이하 조건절 추가
+			String val = entry.getValue().toString();
+
+			if (val.startsWith(">"))
+				sbSql.append("(? is null or " + entry.getKey() + " >= " + val.substring(1, val.length()) + ") \n");
+			else if (val.startsWith("<"))
+				sbSql.append("(? is null or " + entry.getKey() + " <= " + val.substring(1, val.length()) + ") \n");
+			else if (val.equals("isNull")) {
+				sbSql.append(entry.getKey() + " is null \n");
+			}
+			// 8-12 UPDATE 쿼리 수정 진행  		9-27 NVL 처리를 위해 '!'알때는 NVL로 처리되도록 수정	
+			else {
+				if(val == "?")				
+					sbSql.append("(" + entry.getKey() + " = ?) \n");
+				else if(val == "!")	
+					sbSql.append("(nvl(" + entry.getKey() + ", '-1') = ?) \n");
+//				sbSql.append("(? is null or " + entry.getKey() + " is null or " + entry.getKey() + "=?) \n");
+			}
+			
 			entry.setValue(seq++);
 			needAnd = true;
 		}
@@ -551,185 +645,311 @@ public class MetaServiceUpdate {
 			}
 		}
 
-		String[] toKey = null;
-		String[] toValue = null;
-		
-		//to_char between 쿼리 추가 여부
+		// 5_20 to_char 관련 쿼리 추가 여부(배열 시 쿼리 하나만 추가하도록 함)
+		List<String[]> toKey = null;
+		List<String[]> toValue = null;
+
 		boolean append = true;
+		boolean append2 = true;
+		boolean append3 = true;
+		boolean append4 = true;
 
-		Map<String, Object> sql = new HashMap<String, Object>();
+		List<Map<String, Object>> sql = new ArrayList<>();
 
-		//2-25 sim where 절 to_char 설계
-		//3-26 shim paramMap 배열 처리 추가
+		// 2-25 sim where 절 to_char 설계
 		if (paramMap.get("header") != null) {
 			List<Map> header = (List<Map>) paramMap.get("header");
-			
-			for(int i = 0; i < header.size(); i++) {
+
+			for (int i = 0; i < header.size(); i++) {
+				// 5-20 sim Line의 condtionMap을 추적해서 쿼리 생성합니다.
 				if (header.get(i).get(path) != null) {
 					List<Map> line = (List<Map>) header.get(i).get(path);
-					
-					if(line.size() == 1) {
-						if (line.get(0).get("charMap") != null) {
-							sql = (Map<String, Object>) line.get(0).get("charMap");
-							
-							if(toKey == null || toValue == null) {
-								toKey = new String[header.size()];
-								toValue = new String[header.size()];
-							}
-							
-							toKey[i] = sql.get("toKey").toString();
-							toValue[i] = sql.get("toValue").toString();
 
-							if (toValue[0].contains("~") && append) {
-								if (needAnd)
-									sbSql.append("\t   and ");
-								sbSql.append("(to_char(" + alias + "." + toKey[i] + ", '" + sql.get("format").toString()
-										+ "') between ? and ? ) \n");
-								append = false;
-							}
-						}		
-						
-						line.get(0).remove("charMap");
-					}else {
-						for(int j = 0; j < line.size(); j++) {
-							if (line.get(j).get("charMap") != null) {
-								sql = (Map<String, Object>) line.get(j).get("charMap");
-								
-								if(toKey == null || toValue == null) {
-									toKey = new String[line.size()];
-									toValue = new String[line.size()];
-								}
-								
-								toKey[j] = sql.get("toKey").toString();
-								toValue[j] = sql.get("toValue").toString();
+					// 3-26 sim paramMap 배열 처리 추가
+					for (int j = 0; j < line.size(); j++) {
+						if (line.get(j).get("charMap") != null) {
+							sql = (List<Map<String, Object>>) line.get(j).get("charMap");
 
-								if (toValue[j].contains("~") && append) {
+							String[] keyTemp = new String[sql.size()];
+							String[] valTemp = new String[sql.size()];
+
+							if (toKey == null || toValue == null) {
+								toKey = new ArrayList<>();
+								toValue = new ArrayList<>();
+							}
+
+							for (int k = 0; k < sql.size(); k++) {
+								String key = sql.get(k).get("toKey").toString();
+								String val = sql.get(k).get("toValue").toString();
+
+								if (val.contains("~") && append) {
 									if (needAnd)
 										sbSql.append("\t   and ");
-									sbSql.append("(to_char(" + alias + "." + toKey[j] + ", '" + sql.get("format").toString()
-											+ "') between ? and ? ) \n");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') between ? and ? ) \n");
+
 									append = false;
+
+								} else if (val.startsWith(">") && append2) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') >= ? ) \n");
+
+									append2 = false;
+
+								} else if (val.startsWith("<") && append3) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') <= ? ) \n");
+
+									append3 = false;
+
+								} else if (val.startsWith("isNull") && append4) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') is null ) \n");
+
+									append4 = false;
 								}
-							}		
-							
-							line.get(j).remove("charMap");
-						}	
-					}	
 
-				} else if (header.get(i).get("charMap") != null) {
-					sql = (Map<String, Object>) header.get(i).get("charMap");
-					
-					if(toKey == null || toValue == null) {
-						toKey = new String[header.size()];
-						toValue = new String[header.size()];
-					}					
-					
-					toKey[i] = sql.get("toKey").toString();
-					toValue[i] = sql.get("toValue").toString();
+								keyTemp[k] = key;
+								valTemp[k] = val;
+							}
 
-					if (toValue[i].contains("~")  && append ) {
-						if (needAnd)
-							sbSql.append("\t   and ");
-						sbSql.append("(to_char(" + alias + "." + toKey[i] + ", '" + sql.get("format").toString()
-								+ "') between ? and ? ) \n");
-						append = false;
+							toKey.add(keyTemp);
+							toValue.add(valTemp);
+						}
+
+						line.get(j).remove("charMap");
 					}
-					
-					header.get(i).remove("charMap");
-				}		
-			}			
-		}
+					// 5-20 sim header의 condtionMap을 추적해서 쿼리 생성합니다.
+				} else if (header.get(i).get("charMap") != null) {
+					sql = (List<Map<String, Object>>) header.get(i).get("charMap");
 
-		if (needJoin)
-			sbSql.append(")\n");
-		else
-			sbSql.append("\n");
+					// 3-26 sim paramMap 배열 처리 추가
+					for (int j = 0; j < header.size(); j++) {
+						if (header.get(j).get("charMap") != null) {
+							sql = (List<Map<String, Object>>) header.get(j).get("charMap");
 
-		attrSize = attrs.keySet().size();
-		for (List<Object[]> list : whereColumns) {
-			Object[] oa = new Object[attrSize * 2];
-			for (Object[] col : list) {
-				int idx = (int) attrs.get(col[0].toString());
-				oa[idx * 2] = col[2];
-				oa[idx * 2 + 1] = col[2];
+							String[] keyTemp = new String[sql.size()];
+							String[] valTemp = new String[sql.size()];
+
+							if (toKey == null || toValue == null) {
+								toKey = new ArrayList<>();
+								toValue = new ArrayList<>();
+							}
+
+							for (int k = 0; k < sql.size(); k++) {
+								String key = sql.get(k).get("toKey").toString();
+								String val = sql.get(k).get("toValue").toString();
+
+								if (val.contains("~") && append) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') between ? and ? ) \n");
+
+									append = false;
+
+								} else if (val.startsWith(">") && append2) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') >= ? ) \n");
+
+									append2 = false;
+
+								} else if (val.startsWith("<") && append3) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') <= ? ) \n");
+
+									append3 = false;
+
+								} else if (val.startsWith("isNull") && append4) {
+									if (needAnd)
+										sbSql.append("\t   and ");
+
+									sbSql.append("(to_char(" + alias + "." + key + ", '"
+											+ sql.get(k).get("format").toString() + "') is null ) \n");
+
+									append4 = false;
+								}
+
+								keyTemp[k] = key;
+								valTemp[k] = val;
+							}
+
+							toKey.add(keyTemp);
+							toValue.add(valTemp);
+						}
+
+						header.get(i).remove("charMap");
+					}
+				}
 			}
-			whereArgs.add(oa);
-		}
+			// 5-21 sim 컬럼 is null 쿼리를 생성하기 위해 sqlMap에서 조건을 가져옴. 
+			// is null 조건은 무조건 맨 마지막에 생성
+			Map nullMap = new HashMap();
+			nullMap = (Map) sqlMap.get("nullList");
+			List<String> sqlNull = new ArrayList<>();
 
-		List<Object[]> batchArgs = new ArrayList<Object[]>();
-		for (int i = 0; i < setArgs.size(); i++) {
-			Object[] setOa = setArgs.get(i);
-			Object[] whereOa = whereArgs.get(i);
-			Object[] betValue = null;
-			Object[] oa = null;
+			for (Object obj : nullMap.keySet()) {
+				if (nullMap.get(obj).equals("isNull"))
+					sqlNull.add(obj.toString());
+			}
 
-			//2-25 sim where 절 to_char 설계
-			//3-26  sim 배열 처리 추가
-			if(toValue != null) {
-				if (toValue[i].contains("~")) {
-					betValue = toValue[i].split("~");
-					oa = new Object[setOa.length + whereOa.length + betValue.length];
-					int idx = 0;
-					for (Object value2 : setOa)
-						oa[idx++] = value2;
-					for (Object value2 : whereOa)
-						oa[idx++] = value2;
-					for (Object value2 : betValue)
-						oa[idx++] = value2;
+			for (String str : sqlNull) {
+				if (needAnd)
+					sbSql.append("\t   and ");
+
+				sbSql.append("(" + str + " is null) \n");
+			}
+			// 여기까지
+
+			if (needJoin)
+				sbSql.append(")\n");
+			else
+				sbSql.append("\n");
+			//변수 2개 묷음이 아닌 한개씩 매핑되도록 수정
+			attrSize = attrs.keySet().size();
+			for (List<Object[]> list : whereColumns) {
+				Object[] oa = new Object[attrSize];
+				for (Object[] col : list) {
+					int idx = (int) attrs.get(col[0].toString());
+					oa[idx] = col[2];
+					//oa[idx * 2 + 1] = col[2];
+				}
+				whereArgs.add(oa);
+			}
+
+			List<Object[]> batchArgs = new ArrayList<Object[]>();
+			for (int i = 0; i < setArgs.size(); i++) {
+				Object[] setOa = setArgs.get(i);
+				Object[] whereOa = whereArgs.get(i);
+				List<String> conValue = null;
+				Object[] oa = null;
+
+				// 2-25 sim where 절 to_char 설계 //3-26 sim 배열 처리 추가
+				if (toValue != null) {
+					for (String[] temp : toValue) {
+						conValue = new ArrayList<>();					
+						for (int j = 0; j < temp.length; j++) {
+
+							if (temp[j].contains("~")) {
+								conValue.add(temp[j].split("~")[0]);
+								conValue.add(temp[j].split("~")[1]);						
+							}
+							
+							if (temp[j].contains(">") || temp[j].contains("<")) {		
+								conValue.add(temp[j].substring(2, temp[j].length()));								
+							}	
+						}
+						
+						oa = new Object[setOa.length + whereOa.length + conValue.size()];
+						int idx = 0;
+						for (Object value2 : setOa)
+							oa[idx++] = value2;
+						
+						// 5-20 sim where 조건절에 이상/이하 조건 변수 수정 추가
+						for (Object value2 : whereOa) {					
+							// 6-29 sim value : null일때   null 처리 추가.
+							if(value2 == null) {
+								oa[idx++] = "";
+								continue;
+							}
+							
+							if (value2.toString().startsWith(">") || value2.toString().startsWith("<"))
+								oa[idx++] = value2.toString().substring(2, value2.toString().length());
+							else if (value2.toString().equals("isNull"))
+								continue;
+							else
+								oa[idx++] = value2;
+						}					
+						
+						for (Object value2 : conValue)
+							oa[idx++] = value2;
+					}
+
 				} else {
 					oa = new Object[setOa.length + whereOa.length];
 					int idx = 0;
 					for (Object value2 : setOa)
 						oa[idx++] = value2;
-					for (Object value2 : whereOa)
-						oa[idx++] = value2;
+
+					// 5-20 where 조건절에 이상/이하 조건 변수 수정 추가
+					for (Object value2 : whereOa) {
+						// 6-29 value : null일때   null 처리 추가. 9-27 NVL 처리를 위해 -1 로 변수값 수정	
+						if(value2 == null) {
+							oa[idx++] = "-1";
+							continue;
+						}
+						
+						if (value2.toString().startsWith(">") || value2.toString().startsWith("<"))
+							oa[idx++] = value2.toString().substring(2, value2.toString().length());
+						else if (value2.toString().equals("isNull"))
+							continue;
+						else
+							oa[idx++] = value2;
+					}
 				}
-				
-			}else {
-				oa = new Object[setOa.length + whereOa.length];
-				int idx = 0;
-				for (Object value2 : setOa)
-					oa[idx++] = value2;
-				for (Object value2 : whereOa)
-					oa[idx++] = value2;
+
+				batchArgs.add(oa);
 			}
-			
 
-			batchArgs.add(oa);
-		}
+			logger.debug(sbSql.toString() + ";\n" + CUtil.convertListOfObjectArrayToJsonString(batchArgs) + "\n");
 
-		logger.debug(sbSql.toString() + ";\n" + CUtil.convertListOfObjectArrayToJsonString(batchArgs) + "\n");
+			try {
+				int[] iRet = connect.batchUpdate(connStack, sbSql.toString(), batchArgs);
 
-		try {
-			int[] iRet = connect.batchUpdate(connStack, sbSql.toString(), batchArgs);
-
-			List<Map> unAffectedList = new ArrayList<Map>();
-			for (int idx = 0; idx < iRet.length; idx++) {
-				if (iRet[idx] > 0)
-					continue;
-
-				List<Object[]> columnList = whereColumns.get(idx);
-				Map<String, Object> dataMap = new HashMap<String, Object>();
-				for (Object[] col : columnList) {
-					if (col[0].toString().contains("to_char"))
+				List<Map> unAffectedList = new ArrayList<Map>();
+				for (int idx = 0; idx < iRet.length; idx++) {
+					if (iRet[idx] > 0)
 						continue;
-					String key = col[0].toString().replaceFirst("^.*\\.", "");
-					Object val = col[2];
-					dataMap.put(key, val);
+
+					List<Object[]> columnList = whereColumns.get(idx);
+					Map<String, Object> dataMap = new HashMap<String, Object>();
+					for (Object[] col : columnList) {
+						if (col[0].toString().contains("to_char"))
+							continue;
+						String key = col[0].toString().replaceFirst("^.*\\.", "");
+						Object val = col[2];
+						dataMap.put(key, val);
+					}
+					// 3-26 sim 배열 처리 추가 5-21 sim value값이 isNull이면 미반영 맵 put 대상에서 제외
+					if (toKey != null) {
+						
+						String[] keyTemp = toKey.get(idx);
+						String[] valTemp = toValue.get(idx);
+											
+						for(int i = 0; i < valTemp.length; i++) {
+							if(!valTemp[i].equals("isNull"))
+								dataMap.put(keyTemp[i], valTemp[i]);
+						}						
+	
+					}
+
+					unAffectedList.add(dataMap);
 				}
-				// 3-26 sim 배열 처리 추가
-				if (toKey != null)
-					dataMap.put(toKey[idx], toValue[idx]);
 
-				unAffectedList.add(dataMap);
+				if (unAffectedList.size() > 0)
+					unAffectedMap.put(path, unAffectedList);
+
+				resultMap.remove(path);
+			} catch (Exception e) {
+				throw new IFException(ResponseStatus.FAIL, e.getMessage().replaceAll("\n", "").replaceAll("\"", "'"));
 			}
-
-			if (unAffectedList.size() > 0)
-				unAffectedMap.put(path, unAffectedList);
-
-			resultMap.remove(path);
-		} catch (Exception e) {
-			throw new IFException(ResponseStatus.FAIL, e.getMessage().replaceAll("\n", "").replaceAll("\"", "'"));
 		}
 	}
 }

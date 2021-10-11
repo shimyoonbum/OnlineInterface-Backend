@@ -69,12 +69,36 @@ public class CUtil {
 		return sb.toString();
 	}
 	
-	public static String nullString(String str,String def){
+	public static String nullString(String str, String def){
 		if(str == null || str.length() == 0 || str == "null")return def;
 		return str;
-	}	
-
+	}
+	
+	public static Object nullString(Object str, String def){
+		if(str == null || str == "null") return def;
+		return str;
+	}
+	
 	public static <T> T castClass(Object classData, Class<T> classType){		
 		return new Gson().fromJson(new Gson().toJson(classData), classType);
+	}	
+	
+	public static boolean isEmpty(Object s) {
+		if (s == null) {
+			return true;
+		}
+		if ((s instanceof String) && (((String) s).trim().length() == 0)) {
+			return true;
+		}		
+		if (s instanceof Map) {
+			return ((Map<?, ?>) s).isEmpty();
+		}
+		if (s instanceof List) {
+			return ((List<?>) s).isEmpty();
+		}
+		if (s instanceof Object[]) {
+			return (((Object[]) s).length == 0);
+		}
+		return false;
 	}	
 }

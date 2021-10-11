@@ -26,6 +26,8 @@ spring:
     properties:
       mail:
         smtp:
+          ssl:
+            trust: "*"
           auth: false
           starttls:
             enable: true
@@ -88,7 +90,8 @@ dbclean:
          { "table":"ogh_hdr_iface_no_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
          { "table":"ogh_lin_iface_all_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
          { "table":"ogh_hdr_iface_all_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
-         { "table":"ogh_pos_rev_card_if_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" }
+         { "table":"ogh_pos_rev_card_if_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },         
+         { "table":"tb_dlvzone_info", "column":"sys_dat", "format":"yyyymmdd", "type":"date", "backup":"0 day", "period":"1 day","flag":"Y"}
     ]
 logging:
   file: ./logs/log-file

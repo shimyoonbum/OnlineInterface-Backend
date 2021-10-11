@@ -42,15 +42,15 @@ tomcat:
 ---
 dbclean:
   info:
-    enabled: false
+    enabled: true
     backup: "6 month"
     period: "1 day"
     delete: "2 month"
     lock_wait: 3
-    tables: [  
-         { "table":"iflog", "column":"if_date", "format":"yyyymmddhh24miss", "type":"date" },
-         { "table":"test_custord_info", "column":"sys_dat", "format":"yyyymmddhh24miss", "type":"date" },
-         { "table":"test_custord_dtl", "column":"sys_dat", "format":"yyyymmddhh24miss", "type":"date" },
+    tables: [           
+         { "table":"test_custord_info", "column":"sys_dat", "format":"yyyymmddhh24miss", "type":"date"},
+         { "table":"test_custord_dtl", "column":"sys_dat", "format":"yyyymmddhh24miss", "type":"date"},
+         { "table":"test_dlvzone", "column":"sys_dat", "format":"yyyymmdd", "type":"date", "backup":"0 day", "period":"1 day","flag":"Y"}
     ]
 ---    
 logging:

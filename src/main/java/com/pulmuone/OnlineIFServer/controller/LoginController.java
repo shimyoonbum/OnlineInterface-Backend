@@ -8,6 +8,7 @@ import javax.servlet.http.HttpSession;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.pulmuone.OnlineIFServer.common.IFException;
 import com.pulmuone.OnlineIFServer.common.ResponseStatus;
+import com.pulmuone.OnlineIFServer.config.MailConfig;
 import com.pulmuone.OnlineIFServer.config.auth.PrincipalDetails;
 import com.pulmuone.OnlineIFServer.dto.IFUser;
 import com.pulmuone.OnlineIFServer.repository.UserRepository;
@@ -33,6 +35,9 @@ public class LoginController {
 
 	private final UserRepository userRepository;
 	private final BCryptPasswordEncoder bCryptPasswordEncoder;
+	
+	@Autowired
+	private MailConfig mail;
 
 	@GetMapping(value = "/doLogout")
 	public Map<String, Object> doLogout(HttpSession session) {
@@ -98,5 +103,10 @@ public class LoginController {
 		} catch (Exception e) {
 			throw new IFException(ResponseStatus.FAIL, e.getMessage().replaceAll("\n", "").replaceAll("\"", "'"));
 		}
+	}
+		
+	@PostMapping(value = "/getError")
+	public void getError(@RequestBody Map<String, Object> map) throws Exception {
+		mail.sendServer500(map);
 	}
 }

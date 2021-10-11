@@ -518,5 +518,22 @@ public class MetaController {
     public void searchOrgaOfflinePo(HttpServletRequest request, HttpServletResponse response) {
 		metaUtil.interfaces(request, response);
     }
+    
+    /**** 주문|취소 테스트 ****/
+    @PostMapping("/custordt")
+    public void inputPOT(HttpServletRequest request, HttpServletResponse response) throws SQLIntegrityConstraintViolationException {
+		metaUtil.interfaces(request, response);
+    }
+
+    @GetMapping("/custordt")
+    public void searchPOT(HttpServletRequest request, HttpServletResponse response) {
+		metaUtil.interfaces(request, response);
+    }
+
+    @PutMapping("/custordt")
+    public void updatePOT(HttpServletRequest request, HttpServletResponse response) {
+		metaUtil.interfaces(request, response);
+    }
+
 
 }

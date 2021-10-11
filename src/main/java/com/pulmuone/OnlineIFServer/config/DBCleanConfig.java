@@ -38,6 +38,7 @@ public class DBCleanConfig {
 	public static final String TABLES = "tables";
 	public static final String BACKUP = "backup";
 	public static final String DELETE = "delete";
+	public static final String FLAG = "flag";
 	public static final String PERIOD = "period";
 	public static final String LOCK_WAIT = "lock_wait";
 	public static final String BACKUP_TABLE = "backup_table";
@@ -121,7 +122,7 @@ public class DBCleanConfig {
 				backupBoundary = backupBoundaryCommon;
 			} else {
 				if(!checkBoundaryTime(tableMap, periodExpiry))
-					continue;
+					continue;				
 				backupBoundary = setBoundaryTime(backupExpiry);
 			}
 			
@@ -257,7 +258,7 @@ public class DBCleanConfig {
 		String tableName = tableMap.get(TABLE).toString();
 		String columnName = tableMap.get(COLUMN).toString();
 		String format = tableMap.get(FORMAT).toString();
-		String type = tableMap.get(TYPE).toString();
+		String type = tableMap.get(TYPE).toString();		
 
 		String periodBoundary = setCleanPeriodBoundary(boundary, format);
 		if(periodBoundary == null || periodBoundary.equals("null")) {
@@ -265,17 +266,40 @@ public class DBCleanConfig {
 			return;
 		}
 		
-		String queryBackup = buildBackupSql(tableName, columnName, format, type, periodBoundary);
-	    logger.debug(queryBackup);
-		
-		///jdbcTemplate.execute(queryBackup);
-		batchUpdate(queryBackup, new ArrayList<Object[]>());
-		
+		String queryBackup = null;		
+		String backup = null;
 		String queryDelete = null;
+		
+		if(tableMap.get(BACKUP) != null) {
+			
+			backup = tableMap.get(BACKUP).toString();
+			if(!backup.equals("0 day")) {
+				
+				queryBackup = buildBackupSql(tableName, columnName, format, type, periodBoundary);
+			    logger.debug(queryBackup);
+				
+				///jdbcTemplate.execute(queryBackup);
+				batchUpdate(queryBackup, new ArrayList<Object[]>());
+			}
+		}else {
+			queryBackup = buildBackupSql(tableName, columnName, format, type, periodBoundary);
+		    logger.debug(queryBackup);
+			
+			///jdbcTemplate.execute(queryBackup);
+			batchUpdate(queryBackup, new ArrayList<Object[]>());
+		}		
+		
 		if(type.equals(TEXT))
 			queryDelete = "delete from "+tableName+" where "+columnName+" < '"+periodBoundary+"'";
-		else if(type.equals(DATE))
-			queryDelete = "delete from "+tableName+" where "+columnName+" < to_date('"+periodBoundary+"','"+format+"') ";
+		else if(type.equals(DATE)) {
+			//6-14 sim 배송권역 관련 FLAG 값이 초기화 된 데이터만 삭제되도록 설정 추가.
+			if(tableMap.get(FLAG) != null) {
+				queryDelete = "delete from "+tableName+" where "+columnName+" < to_date('"+periodBoundary+"','"+format+"') and itf_flg = 'Y'";			
+			}else {
+				queryDelete = "delete from "+tableName+" where "+columnName+" < to_date('"+periodBoundary+"','"+format+"')";	
+			}			
+		}
+			
 		logger.info(queryDelete+"; ");
 		
 		///jdbcTemplate.execute(queryDelete);
@@ -306,7 +330,7 @@ public class DBCleanConfig {
 	    		if(tableName.equalsIgnoreCase("iflog"))
 	    			jsonSB.append("\""+colNm+"\":\"'||replace(replace("+colNm+",'\\',''),'\"', '\\\"')||'\"");
 	    		else
-	    			jsonSB.append("\""+colNm+"\":\"'||replace(replace(replace(replace(replace("+colNm+",'\\', '\\\\'),'\"','\\\"'),'	',''),CHR(10), ''),CHR(13),'')||'\"");
+	    			jsonSB.append("\""+colNm+"\":\"'||REGEXP_REPLACE("+ colNm + ", '['||chr(13)||chr(10)||CHR(9)||CHR(34)||CHR(92)||']+','')||'\"");
 			} else if(colType.equals("date")) {
 				jsonSB.append("\""+colNm+"\":\"'||to_char("+colNm+",'YYYYMMDDHH24MISS')||'\"");
 			} else {

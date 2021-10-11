@@ -4,6 +4,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -28,6 +30,7 @@ import org.springframework.stereotype.Component;
 
 import com.pulmuone.OnlineIFServer.dto.MailInfo;
 import com.pulmuone.OnlineIFServer.service.MailService;
+import com.pulmuone.OnlineIFServer.util.CamelListMap;
 
 @Component
 public class MailConfig {
@@ -35,7 +38,6 @@ public class MailConfig {
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final static String from = "OnlineMallManager@pulmuone.com";
-    private final static String toManager = "yb.shim@metanetglobal.com";
     private final static String subject = "온라인 통합몰 중계서버 메일링 보고입니다.";
     private final static String utf8 = "UTF-8";
     
@@ -45,7 +47,10 @@ public class MailConfig {
 	@Autowired
     private JavaMailSender javaMailSender;
 	
-	@Scheduled(cron="0 35 16 * * ?")
+	@Autowired
+    JdbcTemplate jdbcTemplate;
+	
+	@Scheduled(cron="0 50 16 * * ?")
 	public void sendSuccessMail() throws Exception{
 		Map<String, MailInfo> list = new HashMap<>();
 		
@@ -189,8 +194,12 @@ public class MailConfig {
 	        	hepler.setSubject(subject);
 	        	hepler.setText(sb.toString(), true);	//html 적용
 	        	hepler.setSentDate(new Date());
-	            
-	            javaMailSender.send(mailMessage);
+
+	    		//서버 id
+	    		String server = System.getProperty("server.id");
+	    		
+	    		if(server.equals("prd2"))
+	    			javaMailSender.send(mailMessage);
 	            
 	        }catch (Exception e) {
 	        	logger.error("메세징 오류 발생!! \n" + e.getMessage());
@@ -244,7 +253,7 @@ public class MailConfig {
 		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREA);	
 		SimpleDateFormat format2 = new SimpleDateFormat("yyyy-MM-dd HHmmss", Locale.KOREA);		
 		String time = format.format(sys);	
-		String time2 = format2.format(sys);
+		String time2 = format2.format(sys);	
 		
 		StringBuffer sb =  new StringBuffer();		
     	sb.append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">"); 
@@ -279,7 +288,10 @@ public class MailConfig {
 		sb.append("		</tr>");
 		sb.append("		<tr style='text-align:center;'>");
 		sb.append("			<td style='word-break:break-all;font-size:12px;width:25%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-bottom:1px solid #ddd;border-left:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;overflow:hidden;text-overflow:ellipsis;'>" + systemNm + "</td>");
-		sb.append("			<td style='word-break:break-all;font-size:12px;width:75%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-bottom:1px solid #ddd;border-left:1px solid #ddd;border-right:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;overflow:hidden;text-overflow:ellipsis;'>" + failReason.replace("_", "-") + "</td>");
+		if(failReason.startsWith("Prepared"))	
+			sb.append("			<td style='word-break:break-all;font-size:12px;width:75%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-bottom:1px solid #ddd;border-left:1px solid #ddd;border-right:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;overflow:hidden;text-overflow:ellipsis;'>" + failReason.split(";")[2].replace("_", "-") + "</td>");
+		else
+			sb.append("			<td style='word-break:break-all;font-size:12px;width:75%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-bottom:1px solid #ddd;border-left:1px solid #ddd;border-right:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;overflow:hidden;text-overflow:ellipsis;'>" + failReason.replace("_", "-") + "</td>");
 		sb.append("		</tr>");			
 		sb.append("</table>");
 		
@@ -330,80 +342,75 @@ public class MailConfig {
 	    	}    
 		}
     }
-	/*
-//	@Scheduled(cron="0 28 23 * * ?")
-	public void sendOrgaCountMail() throws Exception{
-		Map<String, MailInfo> list = new HashMap<>();
-		
-		//sys : 오늘 sys2 : 내일
-		Date syss = new Date();	
-		Date sys = new Date(syss.getTime()+(1000*60*60*24*-1));
-		Date sys2 = new Date();
-		
-		SimpleDateFormat format1 = new SimpleDateFormat("yyyyMMdd000000");
-		SimpleDateFormat format2 = new SimpleDateFormat("yyyyMMdd120000");
-		SimpleDateFormat format3 = new SimpleDateFormat("yyyyMMdd");
-		
-		String today = format1.format(sys);
-		String medium = format2.format(sys);
-		String time = format3.format(sys);	
-		String tommorow = format1.format(sys2);		
+	
+	public void sendServer500(Map<String, Object> map) throws Exception{
 				
-		Map<String, Object> orgaCount = mailService.getOrgaCount(today, medium, time, tommorow);
-		
     	StringBuffer sb =  new StringBuffer();
-
-		sb.append("<html lang='ko'>");		
+    	
+    	Date sys = new Date();	
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREA);	
+		SimpleDateFormat format2 = new SimpleDateFormat("yyyy-MM-dd HHmmss", Locale.KOREA);		
+		String time = format.format(sys);	
+		String time2 = format2.format(sys);	
+    	
+    	Map<String, Object> data = (Map<String, Object>) map.get("errorData");
+    	String msg = map.get("errorMessage").toString();
+    	String id = data.get("interfaceId").toString();    	
+    	String authkey = data.get("authkey").toString();
+    	
+    	sb.append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">"); 
+    	sb.append("<html xmlns=\"http://www.w3.org/1999/xhtml\">");    	
 		sb.append("<head>");
 		sb.append("<meta http-equiv='Content-Type' content='text/html; charset=UTF-8;' />");		
 		sb.append("<meta name='viewport' content='width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0'>");		
 		sb.append("<meta http-equiv='X-UA-Compatible' content='IE=edge' />");
 		sb.append("<title>Online Interface Mail Report</title>");
-		sb.append("</head>");		
-		sb.append("<body style='color:#666;margin:0;padding:0;*word-break:break-all;-ms-word-break:break-all;font-size:12px;font-family:dotum,Helvetica,sans-serif !important'>");													                                                                                                                                                                         
-		sb.append("<div style='padding-bottom:10px'>");
-		sb.append("</div>");
-		sb.append("<div style='width:800px;position:relative;background:#f9f9f9;padding:20px;margin-left:10px;border:1px solid #cccdbb'>");
-		sb.append("<div style='position:relative;width:100%;height:66px;border-top:3px solid #b0cc5a;border-bottom:1px solid #dadada;background:#f9f9f9;padding:0'>");
-		sb.append("<h1 style='position:absolute;left:30px;top:15px;font-size:16px;color:#4c8907'>올가 NEW POS Report</h1>");
-		sb.append("</div>");
-		sb.append("<div>");		
-		sb.append("		<div style='border:1px solid #e9e9e9;background:#fff;font:normal 14px dotum !important;margin-top:20px'>");                                  
-		sb.append("         <table width='100%' cellspacing='0' cellpadding='0'>");
-		sb.append("             <tr>");
-		sb.append("                 <th style='color:#444;font-size:12px;height:20px;letter-spacing:-1px;padding:6px 5px 4px;border-top:2px solid #b0cc5a;border-left:1px solid #c1c1c1;border-bottom:1px solid #c1c1c1;width:50%'>항목명</th>");
-		sb.append("                 <th style='color:#444;font-size:12px;height:20px;letter-spacing:-1px;padding:6px 5px 4px;border-top:2px solid #b0cc5a;border-left:1px solid #c1c1c1;border-bottom:1px solid #c1c1c1;width:50%'>갯수</th>");
-		sb.append("				</tr>");	
-		for( String key : orgaCount.keySet() ){ 
-			if(orgaCount.get(key) != "0") {
-				sb.append("				<tr style='text-align: center;'>");	
-				sb.append("					<td style='color:#444;font-size:12px;height:20px;padding:6px 5px 4px;border-left:1px solid #c1c1c1;border-bottom:1px solid #c1c1c1'>"+ key +"</td>");
-				sb.append("					<td style='color:#444;font-size:12px;height:20px;padding:6px 5px 4px;border-left:1px solid #c1c1c1;border-bottom:1px solid #c1c1c1'>"+ orgaCount.get(key) +"</td>");
-				sb.append("				</tr>");
-			}
-		}
-		sb.append("			</table>");
-		sb.append("		</div>");
-		sb.append("	</div>");
-		sb.append("</div>");
-		sb.append("</body>");
-		sb.append("</html>");	
+		sb.append("</head>");	                                 
+		sb.append("<table width='100%' cellspacing='0' cellpadding='0' border='0'>");
+		sb.append("     <tr>");
+		sb.append("         <th colspan='4' style='font-size:18px;color:#4c8907;border-top:2px solid #b0cc5a;padding-left:20px;padding-top:10px;padding-bottom:10px;'>실시간 모니터링 인터페이스 서버 에러 Report</th>");
+		sb.append("		</tr>");
+		sb.append("     <tr>");
+		sb.append("         <th style='word-break:break-all;font-size:12px;height:20px;width:25%;padding-top:6px;padding-right:5px;padding-bottom:4px;padding-left:5px;background-color:#f7f7f7;border-top:2px solid #b0cc5a;border-left:1px solid #ddd;'>호출일시</th>");
+		sb.append("         <th style='word-break:break-all;font-size:12px;height:20px;width:20%;padding-top:6px;padding-right:5px;padding-bottom:4px;padding-left:5px;background-color:#f7f7f7;border-top:2px solid #b0cc5a;border-left:1px solid #ddd;'>에러코드</th>");
+		sb.append("         <th style='word-break:break-all;font-size:12px;height:20px;width:25%;padding-top:6px;padding-right:5px;padding-bottom:4px;padding-left:5px;background-color:#f7f7f7;border-top:2px solid #b0cc5a;border-left:1px solid #ddd;'>에러 API</th>");
+		sb.append("         <th style='word-break:break-all;font-size:12px;height:20px;width:30%;padding-top:6px;padding-right:5px;padding-bottom:4px;padding-left:5px;background-color:#f7f7f7;border-top:2px solid #b0cc5a;border-left:1px solid #ddd;border-right:1px solid #ddd;'>에러 원인</th>");
+		sb.append("		</tr>");
+		sb.append("		<tr style='text-align:center;'>");
+		sb.append("			<td style='word-break:break-all;font-size:12px;height:20px;width:25%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-left:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;overflow:hidden;text-overflow:ellipsis;'>" + time +"</td>");
+		sb.append("			<td style='word-break:break-all;font-size:12px;height:20px;width:20%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-left:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;overflow:hidden;text-overflow:ellipsis;'>500</td>");
+		sb.append("			<td style='word-break:break-all;font-size:12px;height:20px;width:25%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-left:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;overflow:hidden;text-overflow:ellipsis;'>" + id + "</td>");
+		sb.append("			<td style='word-break:break-all;font-size:12px;height:20px;width:30%;padding-top:5px;padding-right:5px;padding-bottom:3px;padding-left:5px;border-left:1px solid #ddd;border-bottom:1px solid #ddd;color:#666;table-layout:fixed;border-right:1px solid #ddd;'>" + msg + "</td>");
+		sb.append("		</tr>");		
+		sb.append("</table>");
+				
+		//logger.info(sb.toString());  		
 		
-//		logger.info(sb.toString());  		
+		String sql = "SELECT MAIL_ADDRESS FROM IFMAIL WHERE USE_CHK_YN = 'Y'";
+		
+		List<Map<String, Object>> mailList = jdbcTemplate.queryForList(sql);		
+		List<CamelListMap> cameList = new ArrayList<CamelListMap>();		
+		
+		for(Map<String, Object> elem : mailList) 
+			cameList.add(CamelListMap.toCamelListMap(elem));
 			
-		try{
-        	SimpleMailMessage mailMessage = new SimpleMailMessage();
-        	mailMessage.setTo("yb.shim@metanetglobal.com");
-            mailMessage.setSubject("Mail");
-            mailMessage.setText(sb.toString());
-            mailMessage.setSentDate(new Date());
-            
-            javaMailSender.send(mailMessage);
-            
-        }catch (Exception e) {
-        	logger.error("메세징 오류 발생!! \n" + e.getMessage());
-    	}      
-    }
-	
-	*/
+		for(CamelListMap c : cameList) {
+			
+			try{			
+				MimeMessage mailMessage = javaMailSender.createMimeMessage();
+	        	MimeMessageHelper hepler = new MimeMessageHelper(mailMessage, true, utf8);  
+	        	hepler.setFrom(from);   
+	        	hepler.setTo(c.get("mailAddress").toString());
+	        	hepler.setSubject("온라인 통합몰 중계서버 메일링 보고입니다.");
+	        	hepler.setText(sb.toString(), true);	//html 적용
+	        	hepler.setSentDate(new Date());  
+	            
+	            javaMailSender.send(mailMessage);
+	            
+	        }catch (Exception e) {
+	        	logger.error("메세징 오류 발생!! \n" + e.getMessage());
+	    	}    
+			
+		}		  
+    }	
 }

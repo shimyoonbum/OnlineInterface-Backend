@@ -29,12 +29,13 @@
   mail:
     host: 211.233.54.61
     port: 25
-    protocol: smtp
     username: 
     password: 
     properties:
       mail:
         smtp:
+          ssl:
+            trust: "*"
           auth: false
           starttls:
             enable: true 
@@ -52,7 +53,7 @@ tomcat:
     port: 8081
 dbclean:
   info:
-    enabled: false
+    enabled: true
     backup: "3 month"
     period: "1 day"
     delete: "2 month"
@@ -90,7 +91,10 @@ dbclean:
          { "table":"ogh_hdr_iface_no_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
          { "table":"ogh_lin_iface_all_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
          { "table":"ogh_hdr_iface_all_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
-         { "table":"ogh_pos_rev_card_if_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" }
+         { "table":"ogh_pos_rev_card_if_t", "column":"inf_date", "format":"yyyymmdd", "type":"text" },
+         { "table":"test_custord_info", "column":"sys_dat", "format":"yyyymmddhh24miss", "type":"date", "backup":"1 day"},
+         { "table":"test_custord_dtl", "column":"sys_dat", "format":"yyyymmddhh24miss", "type":"date"},
+         { "table":"tb_dlvzone_info", "column":"sys_dat", "format":"yyyymmdd", "type":"date", "backup":"0 day", "period":"1 day","flag":"Y"}
     ]
 logging:
   file: ./logs/log-file

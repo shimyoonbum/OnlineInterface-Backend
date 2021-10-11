@@ -141,8 +141,10 @@ public class MetaUtil {
     		String[] queryParams = queryString.split("&");
     		for (String queryParam : queryParams) {
     			String[] queries = queryParam.split("=");
-    			if(queries.length > 1)
+    			if(queries.length == 2)
     				map.put(queries[0], queries[1]);
+    			else if(queries.length == 3)
+    				map.put(queries[0], queries[1]+"="+queries[2]);
     		}
     	}
     	
@@ -221,7 +223,7 @@ public class MetaUtil {
     		requestData = null;
     	
     	try {
-    		if(respStatus.value().equals("999")) {
+    		if(respStatus.value().equals("999")&& !systemId.equals("system1")) {
         		if(failReason.length == 1)
         			mail.sendFailMail(ifId, systemId, name, requestData, "NullPointer Exception");
         		else
@@ -230,9 +232,9 @@ public class MetaUtil {
         	
     	}catch(Exception e) {
 //    		logger.info("메세징 오류 발생!! \n" + e.getMessage());
-    	}    	
-		
-    	ifLogger.log(request, ifId, isDummy, respStatus.value(), systemId, reqMap, resStr);
+    	}
+    	if(!systemId.equals("system1"))
+    		ifLogger.log(request, ifId, isDummy, respStatus.value(), systemId, reqMap, resStr);
 	}
 	
 }
