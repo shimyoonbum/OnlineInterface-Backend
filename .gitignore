@@ -20,7 +20,10 @@ target/
 /build
 /logs
 /errorlogs
-/config/**
+/config/keystore
+/config/application-local.yml
+/config/application-dev.yml
+/config/application-prd.yml
 /gradle
 /sql
 data.txt
