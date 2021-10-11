@@ -18,10 +18,9 @@ target/
 /bin
 /externalToolBuilders
 /build
-/config/keystore
 /logs
 /errorlogs
-/config
+/config/**
 /gradle
 /sql
 data.txt
